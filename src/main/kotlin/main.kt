@@ -1,23 +1,20 @@
-import com.varabyte.kotter.foundation.session
-import com.varabyte.kotter.foundation.text.textLine
+package pyfixer
+
+import java.util.*
+import com.varabyte.kotter.foundation.*
+import com.varabyte.kotter.foundation.input.*
+import com.varabyte.kotter.foundation.text.*
+import com.varabyte.kotter.runtime.Session
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.decodeFromString
-import kotlinx.serialization.encodeToString
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.jsonArray
-import kotlinx.serialization.json.jsonObject
-import okhttp3.MediaType.Companion.toMediaType
-import okhttp3.OkHttpClient
-import okhttp3.Request
-import okhttp3.RequestBody
-import okhttp3.RequestBody.Companion.toRequestBody
+import onFailure
+import onSuccess
+import runCommand
+import java.io.File
 import java.io.FileInputStream
-import java.io.FileOutputStream
 import java.nio.file.Files
+import java.nio.file.Path
 import java.nio.file.Paths
-import java.util.Properties
 import kotlin.io.path.absolutePathString
 
 @Serializable
@@ -33,81 +30,117 @@ data class PPLXRequest(
     val temperature: Int,
 )
 
-@OptIn(ExperimentalSerializationApi::class)
-fun sendMessageToPPLX(systemMessage: String, userMessage: String): Pair<Error?, String> {
-    val client = OkHttpClient()
-    val mediaType = "application/json".toMediaType()
 
-    val data = PPLXRequest(
-        model = "mistral-7b-instruct",
-        messages = listOf(
-            Message(role = "system", content = systemMessage),
-            Message(role = "user", content = userMessage),
-        ),
-        temperature = 0,
-    )
-    val body = RequestBody.create(mediaType, Json.encodeToString(data))
-
-    val props = Properties()
-    props.load(FileInputStream(".env"))
-    val PPLX_KEY = props.getProperty("PPLX_API_KEY")
-
-    val request = Request.Builder()
-        .url("https://api.perplexity.ai/chat/completions")
-        .post(body)
-        .addHeader("accept", "application/json")
-        .addHeader("content-type", "application/json")
-        .addHeader("authorization", "Bearer $PPLX_KEY")
-        .build()
-    val response = client.newCall(request).execute()
-    val responseBody = response.body?.string()
-
-    if (response.code == 200) {
-        val output = Json.parseToJsonElement(responseBody!!).jsonObject
-        val choices = output["choices"]!!.jsonArray
-        val choice = choices[0].jsonObject["message"]!!.jsonObject["content"]
-        return Pair(null, choice.toString())
+fun Session.attemptFix(attemptNo: Int, pythonFile: Path, dirPath: Path) {
+    if (attemptNo > MAX_ALLOWED_ATTEMPTS) {
+        section {
+            red()
+            textLine("Exceeded maximum number of attempts. Exiting...")
+            textLine("Unable to fix Python code, in the given number of attempts. Please try again later.")
+        }.run()
+        return
     }
-    else {
-        return Pair(Error("Failed to send message to PPLX"), "")
+    section {
+        textLine("Sent code to PPLX for analysis. Waiting for response...")
+        if (attemptNo > 1) {
+            textLine("Attempt $attemptNo")
+        }
+    }.run()
+
+    val userMessage = Files.readString(pythonFile)
+    val (err, PPLXoutput) = sendMessageToPPLX(systemMessage, userMessage)
+
+
+    if (err != null) {
+        section {
+            red()
+            textLine(err.message.toString())
+        }.run()
+        return
+    } else {
+        // Split the output into the fixed code and the explanation and clean escape characters
+        val split = PPLXoutput.replace("\\n", "\n")
+            .replace("\\t", "\t")
+            .replace("\\'", "'")
+            .replace("\\\"", "\"")
+            .replace("\\\\", "\\")
+            .split("Explanation:")
+
+        val fixedCode = split[0].substringAfter("```python").substringBefore("```").trim()
+
+        val explanation = split[1].trim()
+
+        val outputPythonFile = Paths.get("$dirPath/output.py")
+
+        Files.writeString(outputPythonFile, fixedCode)
+
+        section {
+            green()
+            textLine("Fixed code:")
+            white()
+            textLine(fixedCode)
+            red()
+            textLine("Explanation:")
+            white()
+            textLine(explanation)
+        }.run()
+
+        val process = testPython(outputPythonFile, dirPath)
+        val exitCode = process.waitFor()
+
+        process.onFailure {
+            attemptFix(attemptNo + 1, pythonFile, dirPath)
+        }
+//        process.onSuccess {
+//            section {
+//                green()
+//                textLine("Python code is correct! Exiting...")
+//            }.run()
+//        }
     }
+}
+
+fun testPython(pythonPath: Path, dirPath: Path): Process {
+    val hello = "source $dirPath/venv/bin/activate && python -m py_compile ${pythonPath.absolutePathString()}".runCommand()
+    return hello
 }
 
 @OptIn(ExperimentalSerializationApi::class)
 fun main() = session {
-//    section { textLine("Hello, World") }.run()
 
-    val systemMessage =
-        """
-            Given the Python code provided below, please check for and correct any syntax or runtime errors. Ensure the code runs without any errors after your modifications. This will be turned into a python file, so make it easy to parse back.  You may respond with the fixed code in the following format:  Fixed code: //Fixed Code.
-        """.trimIndent()
-    val userMessage = """
-        # This program calculates the average of three numbers
-        def calculate_average(num1, num2, num3):
-            total = num1 + num2 + num3
-            average = total / 3
-            return average
+    val pythonFile = Paths.get("test.py")
 
-        # Test the function
-        result = calculate_average(10, 20, 30)
-        print("The average is:", result)
+    if (!Files.exists(Paths.get("PyFixer_Analyzer"))) {
+        Files.createDirectory(Paths.get("PyFixer_Analyzer"))
+    }
+    val dirPath = Paths.get("PyFixer_Analyzer/")
+    "python3 -m venv $dirPath/venv".runCommand()
+    var process = testPython(pythonFile, dirPath)
 
-        def check_passing(score):
-            if score >= 50
-                print("You passed!")
-            else:
-                print("You failed.")
+    process.onFailure {
+        // Need to run the process again
+        val props = Properties().apply {
+            load(FileInputStream(".env"))
+        }
+        val PPLX_KEY = props.getProperty("PPLX_API_KEY")
+        if (PPLX_KEY == null) {
+            section {
+                red()
+                textLine("PPLX_API_KEY not found in .env file")
+            }.run()
+            return@onFailure
+        }
+        attemptFix(1, pythonFile, dirPath)
+        Files.writeString(pythonFile, Files.readString(Paths.get("$dirPath/output.py")))
+    }
+    section {
+        green()
+        textLine("Python code is correct! Exiting...")
+    }.run()
 
-        def greet(name):
-            message = "Hello, " + name + "!"
-            return message
-
-        # Test the function
-        greeting = greet("Alice")
-        print(greeting)
-    """.trimIndent()
-
-    val (err, PPLXoutput) = sendMessageToPPLX(systemMessage, userMessage)
-
-    println(PPLXoutput)
+    // Clean up created directory
+    Files.walk(dirPath)
+        .sorted(Comparator.reverseOrder())
+        .map(Path::toFile)
+        .forEach { it.delete() }
 }
