@@ -35,16 +35,17 @@ object EnvVariables {
             System.getenv()["PPLX_API_KEY"]?.let {
                 setProperty("PPLX_API_KEY", it)
             }
+            setProperty("MAX_ALLOWED_ATTEMPTS", "5")
         }
     }
 }
 
 fun Session.attemptFix(attemptNo: Int, pythonFile: Path, dirPath: Path) {
-    if (attemptNo > MAX_ALLOWED_ATTEMPTS) {
+    if (attemptNo > EnvVariables.props["MAX_ALLOWED_ATTEMPTS"] as Int) {
         section {
             red()
             textLine("Exceeded maximum number of attempts. Exiting...")
-            textLine("Unable to fix Python code, in the $MAX_ALLOWED_ATTEMPTS attempts.")
+            textLine("Unable to fix Python code, in the ${EnvVariables.props["MAX_ALLOWED_ATTEMPTS"]} attempts.")
         }.run()
         return
     }
@@ -85,10 +86,7 @@ fun Session.handleFile(pythonFile: Path) {
     val exitCode = process.waitFor()
 
     if (exitCode == 1) {
-        val props = Properties().apply {
-            load(FileInputStream(".env"))
-        }
-        val PPLX_KEY = props.getProperty("PPLX_API_KEY")
+        val PPLX_KEY = EnvVariables.props.getProperty("PPLX_API_KEY")
         if (PPLX_KEY == null) {
             section {
                 red(); textLine("PPLX_API_KEY not found in .env file or system environment variables.")
@@ -100,6 +98,9 @@ fun Session.handleFile(pythonFile: Path) {
             }
         }
         attemptFix(1, pythonFile, dirPath)
+        section {
+            textLine("Writing to ${pythonFile.pathString}...")
+        }.run()
         Files.writeString(pythonFile, Files.readString(pythonFile))
     } else {
         section {
@@ -136,7 +137,13 @@ fun main(args: Array<String>) = session {
         }
     } else if (args.contains("--help") || args.contains("-h")) {
         section {
-            textLine("Usage: pyfixer <path_to_python_file>")
+            textLine("Usage: pyfixer [options] [python file]")
+            textLine()
+            textLine("Options:")
+            textLine("  -h, --help    Show this help message and exit")
+            textLine()
+            textLine("Arguments:")
+            textLine("  python file    The path to the Python file you would like to fix")
         }.run()
     } else {
         pythonFile = Paths.get(args.last())
@@ -144,7 +151,7 @@ fun main(args: Array<String>) = session {
             section {
                 red()
                 textLine("File does not exist. Please provide a valid path.")
-                textLine("Enter the path to the Python file or Ctrl-C to quit:")
+                text("Enter the path to the Python file or Ctrl-C to quit:")
                 input(); white()
             }.runUntilInputEntered {
                 onInputEntered {

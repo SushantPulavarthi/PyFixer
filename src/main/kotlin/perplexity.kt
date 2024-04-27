@@ -9,11 +9,9 @@ import kotlinx.serialization.encodeToString
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
-import okhttp3.RequestBody
+import okhttp3.RequestBody.Companion.toRequestBody
 import runCommand
 import kotlin.io.path.absolutePathString
-
-const val MAX_ALLOWED_ATTEMPTS = 5
 
 val systemMessage =
     """
@@ -45,7 +43,7 @@ fun sendMessageToPPLX(systemMessage: String, userMessage: String): String {
     )
     val request = Request.Builder()
         .url("https://api.perplexity.ai/chat/completions")
-        .post(RequestBody.create(mediaType, Json.encodeToString(data)))
+        .post(Json.encodeToString(data).toRequestBody(mediaType))
         .addHeader("accept", "application/json")
         .addHeader("content-type", "application/json")
         .addHeader("authorization", "Bearer ${EnvVariables.props.getProperty("PPLX_API_KEY")}")
@@ -64,7 +62,6 @@ fun sendMessageToPPLX(systemMessage: String, userMessage: String): String {
 }
 
 fun Session.handlePPLXOutput(PPLXoutput: String, attemptNo: Int, pythonFile: Path, dirPath: Path) {
-    // Split the output into the fixed code and the explanation and clean escape characters
     val split = PPLXoutput.replace("\\n", "\n")
         .replace("\\t", "\t")
         .replace("\\'", "'")
@@ -85,7 +82,7 @@ fun Session.handlePPLXOutput(PPLXoutput: String, attemptNo: Int, pythonFile: Pat
     }.run()
 
     val process =
-        "source $dirPath/venv/bin/activate && python -m py_compile ${pythonFile.absolutePathString()}".runCommand()
+        "source $dirPath/venv/bin/activate && python -m py_compile ${outputPythonFile.absolutePathString()}".runCommand()
     val exitCode = process.waitFor()
 
     if (exitCode == 1) {
