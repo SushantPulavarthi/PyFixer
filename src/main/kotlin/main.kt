@@ -35,13 +35,16 @@ object EnvVariables {
             System.getenv()["PPLX_API_KEY"]?.let {
                 setProperty("PPLX_API_KEY", it)
             }
-            setProperty("MAX_ALLOWED_ATTEMPTS", "5")
+        }
+    }.also {
+        if (it["MAX_ALLOWED_ATTEMPTS"] == null) {
+            it.setProperty("MAX_ALLOWED_ATTEMPTS", "5")
         }
     }
 }
 
 fun Session.attemptFix(attemptNo: Int, pythonFile: Path, dirPath: Path) {
-    if (attemptNo > EnvVariables.props["MAX_ALLOWED_ATTEMPTS"] as Int) {
+    if (attemptNo > EnvVariables.props.getProperty("MAX_ALLOWED_ATTEMPTS").toInt()) {
         section {
             red()
             textLine("Exceeded maximum number of attempts. Exiting...")
@@ -122,15 +125,14 @@ fun main(args: Array<String>) = session {
         section {
             red()
             textLine("No arguments provided. Please provide the path to the Python file.")
-        }.run()
-        section {
-            textLine("Please provide the path to the Python file you would like to fix.")
-            textLine("Enter the path to the Python file or Ctrl-C to quit:")
-            input()
+            text("Enter the path to the Python file or Ctrl-C to quit: ") ; input()
         }.runUntilInputEntered {
             onInputEntered {
                 pythonFile = Paths.get(input)
-                if (input == null || !Files.exists(pythonFile!!)) {
+                if (input == "" || !Files.exists(pythonFile!!)) {
+                    println("File does not exist. Please provide a valid path.")
+                    println(pythonFile)
+                    println(Files.exists(pythonFile!!))
                     rejectInput()
                 }
             }
@@ -145,6 +147,7 @@ fun main(args: Array<String>) = session {
             textLine("Arguments:")
             textLine("  python file    The path to the Python file you would like to fix")
         }.run()
+        return@session
     } else {
         pythonFile = Paths.get(args.last())
         if (!Files.exists(pythonFile!!)) {
@@ -156,7 +159,7 @@ fun main(args: Array<String>) = session {
             }.runUntilInputEntered {
                 onInputEntered {
                     pythonFile = Paths.get(input)
-                    if (input == null || !Files.exists(pythonFile!!)) {
+                    if (input == "" || !Files.exists(pythonFile!!)) {
                         rejectInput()
                     }
                 }
