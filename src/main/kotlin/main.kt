@@ -118,6 +118,14 @@ fun Session.handleFile(pythonFile: Path) {
         .forEach { it.delete() }
 }
 
+fun handlePath(path: String): Path {
+    return if (path.startsWith("~")) {
+        Paths.get("/home", System.getProperty("user.name"), path.drop(1))
+    } else {
+        Paths.get(path)
+    }
+}
+
 @OptIn(ExperimentalSerializationApi::class)
 fun main(args: Array<String>) = session {
     var pythonFile: Path? = null
@@ -128,11 +136,10 @@ fun main(args: Array<String>) = session {
             text("Enter the path to the Python file or Ctrl-C to quit: ") ; input()
         }.runUntilInputEntered {
             onInputEntered {
-                pythonFile = Paths.get(input)
+                pythonFile = handlePath(input)
                 if (input == "" || !Files.exists(pythonFile!!)) {
                     println("File does not exist. Please provide a valid path.")
-                    println(pythonFile)
-                    println(Files.exists(pythonFile!!))
+                    println(pythonFile!!.toAbsolutePath())
                     rejectInput()
                 }
             }
@@ -149,7 +156,7 @@ fun main(args: Array<String>) = session {
         }.run()
         return@session
     } else {
-        pythonFile = Paths.get(args.last())
+        pythonFile = handlePath(args.last())
         if (!Files.exists(pythonFile!!)) {
             section {
                 red()
@@ -158,7 +165,7 @@ fun main(args: Array<String>) = session {
                 input(); white()
             }.runUntilInputEntered {
                 onInputEntered {
-                    pythonFile = Paths.get(input)
+                    pythonFile = handlePath(input)
                     if (input == "" || !Files.exists(pythonFile!!)) {
                         rejectInput()
                     }
