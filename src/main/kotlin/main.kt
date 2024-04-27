@@ -8,7 +8,6 @@ import com.varabyte.kotter.foundation.session
 import com.varabyte.kotter.runtime.Session
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.Serializable
-import runCommand
 import java.io.File
 import java.io.FileInputStream
 import kotlin.io.path.absolutePathString
@@ -41,6 +40,16 @@ object EnvVariables {
             it.setProperty("MAX_ALLOWED_ATTEMPTS", "5")
         }
     }
+}
+
+fun String.runCommand(workingDir: File? = null): Process {
+    val procesBuilder = ProcessBuilder(*this.split(" ").toTypedArray())
+        .redirectOutput(ProcessBuilder.Redirect.INHERIT)
+        .redirectError(ProcessBuilder.Redirect.INHERIT)
+    if (workingDir != null) {
+        procesBuilder.directory(workingDir)
+    }
+    return procesBuilder.start()
 }
 
 fun Session.attemptFix(attemptNo: Int, pythonFile: Path, dirPath: Path) {
@@ -79,12 +88,17 @@ fun Session.handleFile(pythonFile: Path) {
         textLine()
     }.run()
 
+    if (Files.exists(Paths.get("PyFixer_Analyzer"))) {
+        Files.walk(Paths.get("PyFixer_Analyzer"))
+            .sorted(Comparator.reverseOrder())
+            .map(Path::toFile)
+            .forEach { it.delete() }
+    }
     Files.createDirectories(Paths.get("PyFixer_Analyzer"))
     val dirPath = Paths.get("PyFixer_Analyzer/")
 
-    "python3 -m venv $dirPath/venv".runCommand()
     val process =
-        "source $dirPath/venv/bin/activate && python -m py_compile ${pythonFile.absolutePathString()}".runCommand()
+        "python -m py_compile ${pythonFile.absolutePathString()}".runCommand(File(dirPath.toString()))
 
     val exitCode = process.waitFor()
 
@@ -161,7 +175,7 @@ fun main(args: Array<String>) = session {
             section {
                 red()
                 textLine("File does not exist. Please provide a valid path.")
-                text("Enter the path to the Python file or Ctrl-C to quit:")
+                text("Enter the path to the Python file or Ctrl-C to quit: ")
                 input(); white()
             }.runUntilInputEntered {
                 onInputEntered {

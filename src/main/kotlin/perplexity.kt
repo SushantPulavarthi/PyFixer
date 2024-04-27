@@ -10,7 +10,7 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
-import runCommand
+import java.io.File
 import kotlin.io.path.absolutePathString
 
 val systemMessage =
@@ -18,7 +18,7 @@ val systemMessage =
             Given the Python code provided below, please check for and correct any syntax or runtime errors.
             Ensure the code runs without any errors after your modifications.
             Make sure to fix any syntax errors, and try your best to fix runtime errors. For example: wrap in a try-except block, etc.
-            Do not change the logic of the code, and do not remove any lines. You must return the entire code back to the user.
+            Do not change the logic of the code, and do not remove any lines. You must return the entire code back to the user, and not add any comments.
             You may only respond in the following format, and nothing else:
             Fixed code: 
             ```python
@@ -82,7 +82,7 @@ fun Session.handlePPLXOutput(PPLXoutput: String, attemptNo: Int, pythonFile: Pat
     }.run()
 
     val process =
-        "source $dirPath/venv/bin/activate && python -m py_compile ${outputPythonFile.absolutePathString()}".runCommand()
+        "python -m py_compile ${outputPythonFile.absolutePathString()}".runCommand(File(dirPath.toString()))
     val exitCode = process.waitFor()
 
     if (exitCode == 1) {
