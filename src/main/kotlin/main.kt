@@ -103,13 +103,13 @@ fun Session.handleFile(pythonFile: Path) {
         attemptFix(1, pythonFile, dirPath)
         section {
             textLine("Writing to ${pythonFile.pathString}...")
+            textLine(pythonFile.pathString)
         }.run()
-        Files.writeString(pythonFile, Files.readString(pythonFile))
-    } else {
-        section {
-            green(); textLine("Python code is correct! Exiting...")
-        }.run()
+        Files.writeString(pythonFile, Files.readString(Paths.get("$dirPath/output.py")))
     }
+    section {
+        green(); textLine("Python code is correct! Exiting...")
+    }.run()
 
     // Clean up created directory
     Files.walk(dirPath)
