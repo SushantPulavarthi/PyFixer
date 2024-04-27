@@ -1,28 +1,18 @@
 package pyfixer
 
 import com.varabyte.kotter.foundation.text.*
+import java.nio.file.*
+import kotlinx.serialization.json.*
 import com.varabyte.kotter.runtime.Session
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.encodeToString
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.jsonArray
-import kotlinx.serialization.json.jsonObject
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody
-import onFailure
-import onSuccess
-import java.io.FileInputStream
-import java.nio.file.Files
-import java.nio.file.Path
-import java.nio.file.Paths
-import java.util.*
+import runCommand
+import kotlin.io.path.absolutePathString
 
-val props = Properties().apply {
-    load(FileInputStream(".env"))
-}
-val PPLX_KEY: String = props.getProperty("PPLX_API_KEY")
 const val MAX_ALLOWED_ATTEMPTS = 5
 
 val systemMessage =
@@ -41,7 +31,7 @@ val systemMessage =
         """.trimIndent()
 
 @OptIn(ExperimentalSerializationApi::class)
-fun sendMessageToPPLX(systemMessage: String, userMessage: String): Pair<Error?, String> {
+fun sendMessageToPPLX(systemMessage: String, userMessage: String): String {
     val client = OkHttpClient()
     val mediaType = "application/json".toMediaType()
 
@@ -58,7 +48,7 @@ fun sendMessageToPPLX(systemMessage: String, userMessage: String): Pair<Error?, 
         .post(RequestBody.create(mediaType, Json.encodeToString(data)))
         .addHeader("accept", "application/json")
         .addHeader("content-type", "application/json")
-        .addHeader("authorization", "Bearer $PPLX_KEY")
+        .addHeader("authorization", "Bearer ${EnvVariables.props.getProperty("PPLX_API_KEY")}")
         .build()
     val response = client.newCall(request).execute()
     val responseBody = response.body?.string()
@@ -67,8 +57,38 @@ fun sendMessageToPPLX(systemMessage: String, userMessage: String): Pair<Error?, 
         val output = Json.parseToJsonElement(responseBody!!).jsonObject
         val choices = output["choices"]!!.jsonArray
         val choice = choices[0].jsonObject["message"]!!.jsonObject["content"]
-        return Pair(null, choice.toString())
+        return choice.toString()
     } else {
-        return Pair(Error("Failed to send message to PPLX"), "")
+        throw Exception("Failed to send message to Perplexity.ai. Error: $responseBody")
+    }
+}
+
+fun Session.handlePPLXOutput(PPLXoutput: String, attemptNo: Int, pythonFile: Path, dirPath: Path) {
+    // Split the output into the fixed code and the explanation and clean escape characters
+    val split = PPLXoutput.replace("\\n", "\n")
+        .replace("\\t", "\t")
+        .replace("\\'", "'")
+        .replace("\\\"", "\"")
+        .replace("\\\\", "\\")
+        .split("Explanation:")
+
+    val fixedCode = split[0].substringAfter("```python").substringBefore("```").trim()
+    val explanation = split[1].trim()
+    val outputPythonFile = Paths.get("$dirPath/output.py")
+    Files.writeString(outputPythonFile, fixedCode)
+
+    section {
+        green(); textLine("Fixed code:")
+        white(); textLine(fixedCode); textLine()
+        red(); textLine("Explanation:")
+        white(); textLine(explanation)
+    }.run()
+
+    val process =
+        "source $dirPath/venv/bin/activate && python -m py_compile ${pythonFile.absolutePathString()}".runCommand()
+    val exitCode = process.waitFor()
+
+    if (exitCode == 1) {
+        attemptFix(attemptNo + 1, pythonFile, dirPath)
     }
 }
