@@ -9,7 +9,7 @@ Pre-Requisite: Will need a Perplexity.ai API key to use the tool.
                                          # Subsequent runs will an start interactive session
 ./pyfixer.sh [path to python file]       # Will start analyzing and attempt to fix this file
 
-./pyfixer.sh --rebuild                   # Included if gradle application needs to be rebuilt (eg: updates)
+./pyfixer.sh --rebuild                   # Included if gradle application needs to be rebuilt
 ```
 
 ## Demo
