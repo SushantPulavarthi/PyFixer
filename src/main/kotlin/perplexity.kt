@@ -81,6 +81,10 @@ fun Session.handlePPLXOutput(PPLXoutput: String, attemptNo: Int, pythonFile: Pat
         white(); textLine(explanation)
     }.run()
 
+    section {
+        red()
+        textLine("Errors found: ")
+    }.run()
     val process =
         "python -m py_compile ${outputPythonFile.absolutePathString()}".runCommand(File(dirPath.toString()))
     val exitCode = process.waitFor()

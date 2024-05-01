@@ -97,6 +97,10 @@ fun Session.handleFile(pythonFile: Path) {
     Files.createDirectories(Paths.get("PyFixer_Analyzer"))
     val dirPath = Paths.get("PyFixer_Analyzer/")
 
+    section {
+        red()
+        textLine("Errors found in python code: ")
+    }.run()
     val process =
         "python -m py_compile ${pythonFile.absolutePathString()}".runCommand(File(dirPath.toString()))
 
