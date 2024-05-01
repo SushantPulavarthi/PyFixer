@@ -2,11 +2,10 @@ plugins {
     kotlin("jvm") version "1.9.23"
     application
     kotlin("plugin.serialization") version "1.9.22"
-    id("com.github.johnrengelman.shadow") version "8.1.1"
 }
 
 group = "org.example"
-version = "1.0-SNAPSHOT"
+version = "1.0"
 
 repositories {
     mavenCentral()

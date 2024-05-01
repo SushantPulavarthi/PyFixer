@@ -1,15 +1,19 @@
 package pyfixer
 
-import com.varabyte.kotter.foundation.input.*
-import com.varabyte.kotter.foundation.text.*
-import java.nio.file.*
-import java.util.*
+import com.varabyte.kotter.foundation.input.input
+import com.varabyte.kotter.foundation.input.onInputEntered
+import com.varabyte.kotter.foundation.input.runUntilInputEntered
 import com.varabyte.kotter.foundation.session
+import com.varabyte.kotter.foundation.text.*
 import com.varabyte.kotter.runtime.Session
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.Serializable
 import java.io.File
 import java.io.FileInputStream
+import java.nio.file.Files
+import java.nio.file.Path
+import java.nio.file.Paths
+import java.util.*
 import kotlin.io.path.absolutePathString
 import kotlin.io.path.pathString
 
@@ -43,13 +47,13 @@ object EnvVariables {
 }
 
 fun String.runCommand(workingDir: File? = null): Process {
-    val procesBuilder = ProcessBuilder(*this.split(" ").toTypedArray())
+    val processBuilder = ProcessBuilder(*this.split(" ").toTypedArray())
         .redirectOutput(ProcessBuilder.Redirect.INHERIT)
         .redirectError(ProcessBuilder.Redirect.INHERIT)
     if (workingDir != null) {
-        procesBuilder.directory(workingDir)
+        processBuilder.directory(workingDir)
     }
-    return procesBuilder.start()
+    return processBuilder.start()
 }
 
 fun Session.attemptFix(attemptNo: Int, pythonFile: Path, dirPath: Path) {
@@ -151,13 +155,11 @@ fun main(args: Array<String>) = session {
         section {
             red()
             textLine("No arguments provided. Please provide the path to the Python file.")
-            text("Enter the path to the Python file or Ctrl-C to quit: ") ; input()
+            text("Enter the path to the Python file or Ctrl-C to quit: "); input()
         }.runUntilInputEntered {
             onInputEntered {
                 pythonFile = handlePath(input)
                 if (input == "" || !Files.exists(pythonFile!!)) {
-                    println("File does not exist. Please provide a valid path.")
-                    println(pythonFile!!.toAbsolutePath())
                     rejectInput()
                 }
             }
@@ -179,7 +181,7 @@ fun main(args: Array<String>) = session {
             section {
                 red()
                 textLine("File does not exist. Please provide a valid path.")
-                text("Enter the path to the Python file or Ctrl-C to quit: ")
+                text("Enter the path to the Python file or Q to quit: ")
                 input(); white()
             }.runUntilInputEntered {
                 onInputEntered {
