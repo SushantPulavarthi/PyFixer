@@ -7,7 +7,6 @@ import com.varabyte.kotter.foundation.session
 import com.varabyte.kotter.foundation.text.*
 import com.varabyte.kotter.runtime.Session
 import kotlinx.serialization.ExperimentalSerializationApi
-import kotlinx.serialization.Serializable
 import java.io.File
 import java.io.FileInputStream
 import java.nio.file.Files
@@ -17,21 +16,9 @@ import java.util.*
 import kotlin.io.path.absolutePathString
 import kotlin.io.path.pathString
 
-@Serializable
-data class Message(
-    val role: String,
-    val content: String,
-)
-
-@Serializable
-data class PPLXRequest(
-    val model: String,
-    val messages: List<Message>,
-    val temperature: Int,
-)
-
 object EnvVariables {
     val props = Properties().apply {
+        // Check for local .env file otherwise check for system environment variables
         if (File(".env").exists()) {
             load(FileInputStream(".env"))
         } else {
@@ -40,6 +27,7 @@ object EnvVariables {
             }
         }
     }.also {
+        // Default parameters - may extract into config file in future
         if (it["MAX_ALLOWED_ATTEMPTS"] == null) {
             it.setProperty("MAX_ALLOWED_ATTEMPTS", "5")
         }
@@ -48,15 +36,14 @@ object EnvVariables {
 
 fun String.runCommand(workingDir: File? = null): Process {
     val processBuilder = ProcessBuilder(*this.split(" ").toTypedArray())
+        .directory(workingDir)
         .redirectOutput(ProcessBuilder.Redirect.INHERIT)
         .redirectError(ProcessBuilder.Redirect.INHERIT)
-    if (workingDir != null) {
-        processBuilder.directory(workingDir)
-    }
     return processBuilder.start()
 }
 
 fun Session.attemptFix(attemptNo: Int, pythonFile: Path, dirPath: Path) {
+    // Prevents infinite loop if AI is having issues fixing the code
     if (attemptNo > EnvVariables.props.getProperty("MAX_ALLOWED_ATTEMPTS").toInt()) {
         section {
             red()
@@ -92,24 +79,23 @@ fun Session.handleFile(pythonFile: Path) {
         textLine()
     }.run()
 
-    if (Files.exists(Paths.get("PyFixer_Analyzer"))) {
-        Files.walk(Paths.get("PyFixer_Analyzer"))
-            .sorted(Comparator.reverseOrder())
-            .map(Path::toFile)
-            .forEach { it.delete() }
-    }
-    Files.createDirectories(Paths.get("PyFixer_Analyzer"))
+
     val dirPath = Paths.get("PyFixer_Analyzer/")
+    dirPath.toFile().deleteRecursively()
+    Files.createDirectories(dirPath)
 
     section {
         red()
         textLine("Errors found in python code: ")
     }.run()
+    // Compiles the Python code to check for syntax errors
+    // Chose this instead of running the file, as there maybe infinite loops or other problems caused by running the file
     val process =
         "python -m py_compile ${pythonFile.absolutePathString()}".runCommand(File(dirPath.toString()))
 
     val exitCode = process.waitFor()
 
+    // If an error is found while compiling, sends to Perplexity in an attempt to fix it.
     if (exitCode == 1) {
         val PPLX_KEY = EnvVariables.props.getProperty("PPLX_API_KEY")
         if (PPLX_KEY == null) {
@@ -133,11 +119,7 @@ fun Session.handleFile(pythonFile: Path) {
         green(); textLine("Python code is correct! Exiting...")
     }.run()
 
-    // Clean up created directory
-    Files.walk(dirPath)
-        .sorted(Comparator.reverseOrder())
-        .map(Path::toFile)
-        .forEach { it.delete() }
+    dirPath.toFile().deleteRecursively()
 }
 
 fun handlePath(path: String): Path {
@@ -151,7 +133,9 @@ fun handlePath(path: String): Path {
 @OptIn(ExperimentalSerializationApi::class)
 fun main(args: Array<String>) = session {
     var pythonFile: Path? = null
+
     if (args.isEmpty()) {
+        // Starts Interactive Session
         section {
             red()
             textLine("No arguments provided. Please provide the path to the Python file.")
@@ -176,6 +160,7 @@ fun main(args: Array<String>) = session {
         }.run()
         return@session
     } else {
+        // Default option: Handles last argument as the Python file path
         pythonFile = handlePath(args.last())
         if (!Files.exists(pythonFile!!)) {
             section {

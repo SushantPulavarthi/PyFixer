@@ -6,6 +6,7 @@ import com.varabyte.kotter.foundation.text.textLine
 import com.varabyte.kotter.foundation.text.white
 import com.varabyte.kotter.runtime.Session
 import kotlinx.serialization.ExperimentalSerializationApi
+import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonArray
@@ -19,6 +20,20 @@ import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
 import kotlin.io.path.absolutePathString
+
+@Serializable
+data class Message(
+    val role: String,
+    val content: String,
+)
+
+@Serializable
+data class PPLXRequest(
+    val model: String,
+    val messages: List<Message>,
+    val temperature: Int,
+)
+
 
 val systemMessage =
     """
@@ -69,6 +84,7 @@ fun sendMessageToPPLX(systemMessage: String, userMessage: String): String {
 }
 
 fun Session.handlePPLXOutput(PPLXoutput: String, attemptNo: Int, pythonFile: Path, dirPath: Path) {
+    // Replace all break characters, and split code and explanation
     val split = PPLXoutput.replace("\\n", "\n")
         .replace("\\t", "\t")
         .replace("\\'", "'")
@@ -76,6 +92,7 @@ fun Session.handlePPLXOutput(PPLXoutput: String, attemptNo: Int, pythonFile: Pat
         .replace("\\\\", "\\")
         .split("Explanation:")
 
+    // Extract fixed code
     val fixedCode = split[0].substringAfter("```python").substringBefore("```").trim()
     val explanation = split[1].trim()
     val outputPythonFile = Paths.get("$dirPath/output.py")
@@ -92,6 +109,8 @@ fun Session.handlePPLXOutput(PPLXoutput: String, attemptNo: Int, pythonFile: Pat
         red()
         textLine("Errors found: ")
     }.run()
+
+    // Checks again to see if code is correct
     val process =
         "python -m py_compile ${outputPythonFile.absolutePathString()}".runCommand(File(dirPath.toString()))
     val exitCode = process.waitFor()
