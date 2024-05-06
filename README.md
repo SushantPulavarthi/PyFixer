@@ -20,6 +20,7 @@ https://github.com/SushantPulavarthi/PyFixer/assets/69082740/190a843b-9ce6-44fb-
 
 https://github.com/SushantPulavarthi/PyFixer/assets/69082740/69706181-687e-470f-a197-643c5fe7b587
 
+[Alternative Link to Demos (Imgur)](https://imgur.com/a/9W7lrza)
 
 ## Environment Variables
 Must define a `.env` file in running directory or define environment variables as System variables.
